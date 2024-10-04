@@ -10,10 +10,17 @@ class ContactoController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $contactos = Contacto::with(['telefonos', 'emails', 'direcciones'])->paginate(10);
-        return response()->json($contactos);
+        $query = Contacto::with(['telefonos', 'emails', 'direcciones']);
+
+    if ($request->has('ciudad')) {
+        $query->whereHas('direcciones', function($q) use ($request) {
+            $q->where('ciudad', $request->ciudad);
+        });
+    }
+
+    return $query->paginate(10);
     }
 
     public function contactosPorCiudad($ciudad)
@@ -29,11 +36,21 @@ class ContactoController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'nombre' => 'required|string|max:255',
-            'telefonos.*.numero' => 'required|string',
-            'emails.*.email' => 'required|email',
+            'notas' => 'nullable|string',
+            'fecha_nacimiento' => 'nullable|date',
+            'pagina_web' => 'nullable|url',
+            'empresa' => 'nullable|string|max:255',
+            'telefonos' => 'required|array',
+            'telefonos.*' => 'required|string|min:10|max:15',
+            'emails' => 'required|array',
+            'emails.*' => 'required|email',
+            'direcciones' => 'required|array',
+            'direcciones.*.direccion' => 'required|string',
+            'direcciones.*.ciudad' => 'required|string',
         ]);
+        $contacto = Contacto::create($validated);
     }
 
     /**
