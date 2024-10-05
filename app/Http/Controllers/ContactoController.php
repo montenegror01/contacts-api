@@ -14,13 +14,7 @@ class ContactoController extends Controller
     {
         $query = Contacto::with(['telefonos', 'emails', 'direcciones']);
 
-    if ($request->has('ciudad')) {
-        $query->whereHas('direcciones', function($q) use ($request) {
-            $q->where('ciudad', $request->ciudad);
-        });
-    }
-
-    return $query->paginate(10);
+        return $query->paginate(10);
     }
 
     public function contactosPorCiudad($ciudad)
@@ -36,21 +30,66 @@ class ContactoController extends Controller
      */
     public function store(Request $request)
     {
+        // Validar los datos
         $validated = $request->validate([
             'nombre' => 'required|string|max:255',
             'notas' => 'nullable|string',
             'fecha_nacimiento' => 'nullable|date',
             'pagina_web' => 'nullable|url',
             'empresa' => 'nullable|string|max:255',
-            'telefonos' => 'required|array',
-            'telefonos.*' => 'required|string|min:10|max:15',
-            'emails' => 'required|array',
-            'emails.*' => 'required|email',
-            'direcciones' => 'required|array',
+
+            'telefonos' => 'required|array|min:1',  
+            'telefonos.*.numero' => 'required|string|min:10|max:15',  
+            'telefonos.*.tipo' => 'nullable|string',
+
+            'emails' => 'required|array|min:1',  
+            'emails.*.email' => 'required|email',
+
+            'direcciones' => 'required|array|min:1',  
             'direcciones.*.direccion' => 'required|string',
             'direcciones.*.ciudad' => 'required|string',
+            'direcciones.*.estado' => 'required|string',
+            'direcciones.*.codigo_postal' => 'required|string',
         ]);
-        $contacto = Contacto::create($validated);
+
+        // Crear el contacto principal
+        $contacto = Contacto::create([
+            'nombre' => $validated['nombre'],
+            'notas' => $validated['notas'] ?? null,
+            'fecha_nacimiento' => $validated['fecha_nacimiento'] ?? null,
+            'pagina_web' => $validated['pagina_web'] ?? null,
+            'empresa' => $validated['empresa'] ?? null,
+        ]);
+
+        // Agregar los teléfonos
+        foreach ($validated['telefonos'] as $telefono) {
+            $contacto->telefonos()->create([
+                'numero' => $telefono['numero'],
+                'tipo' => $telefono['tipo'] ?? null,
+            ]);
+        }
+
+        // Agregar los emails
+        foreach ($validated['emails'] as $email) {
+            $contacto->emails()->create([
+                'email' => $email['email'],
+            ]);
+        }
+
+        // Agregar las direcciones
+        foreach ($validated['direcciones'] as $direccion) {
+            $contacto->direcciones()->create([
+                'direccion' => $direccion['direccion'],
+                'ciudad' => $direccion['ciudad'],
+                'estado' => $direccion['estado'],
+                'codigo_postal' => $direccion['codigo_postal'],
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Contacto creado exitosamente',
+            'contacto' => $contacto->load(['telefonos', 'emails', 'direcciones'])  
+        ], 201);
     }
 
     /**
@@ -58,11 +97,8 @@ class ContactoController extends Controller
      */
     public function show(string $id)
     {
-        $request->validate([
-            'nombre' => 'required|string|max:255',
-            'telefonos.*.numero' => 'required|string',
-            'emails.*.email' => 'required|email',
-        ]);
+        $contacto=Contacto::with(['telefonos', 'emails', 'direcciones'])->find($id);
+        return response()->json($contacto);
     }
 
     /**
@@ -70,7 +106,64 @@ class ContactoController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        //
+        // Validar los datos entrantes
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:255',
+            'notas' => 'nullable|string',
+            'fecha_nacimiento' => 'nullable|date',
+            'pagina_web' => 'nullable|url',
+            'empresa' => 'nullable|string|max:255',
+            'telefonos' => 'required|array',
+            'telefonos.*.numero' => 'required|string|min:10|max:15',  
+            'telefonos.*.tipo' => 'nullable|string',
+            'emails' => 'required|array',
+            'emails.*.email' => 'required|email',
+            'direcciones' => 'required|array',
+            'direcciones.*.direccion' => 'required|string',
+            'direcciones.*.ciudad' => 'required|string',
+            'direcciones.*.estado' => 'required|string',
+            'direcciones.*.codigo_postal' => 'required|string',
+        ]);
+        // Encontrar el contacto
+        $contacto = Contacto::with(['telefonos', 'emails', 'direcciones'])->findOrFail($id);
+
+        // Actualizar los campos del contacto principal
+        $contacto->update([
+            'nombre' => $validated['nombre'],
+            'notas' => $validated['notas'] ?? null,
+            'fecha_nacimiento' => $validated['fecha_nacimiento'] ?? null,
+            'pagina_web' => $validated['pagina_web'] ?? null,
+            'empresa' => $validated['empresa'] ?? null,
+        ]);
+
+        // Actualizar los teléfonos
+        $contacto->telefonos()->delete(); // Eliminar teléfonos anteriores
+        foreach ($validated['telefonos'] as $telefono) {
+            $contacto->telefonos()->create([
+                'numero' => $telefono['numero'],
+                'tipo' => $telefono['tipo'] ?? null
+            ]);
+        }
+
+        // Actualizar los emails
+        $contacto->emails()->delete();
+        foreach ($validated['emails'] as $email) {
+            $contacto->emails()->create(['email' => $email['email']]);
+        }
+
+        // Actualizar las direcciones
+        $contacto->direcciones()->delete();
+        foreach ($validated['direcciones'] as $direccion) {
+            $contacto->direcciones()->create([
+                'direccion' => $direccion['direccion'],
+                'ciudad' => $direccion['ciudad'],
+                'estado' => $direccion['estado'],
+                'codigo_postal' => $direccion['codigo_postal'],
+            ]);
+        }
+
+        return response()->json(['message' => 'Contacto actualizado correctamente', 'contacto' => $contacto]);
+
     }
 
     /**
@@ -78,6 +171,20 @@ class ContactoController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        try {
+            $contacto = Contacto::with(['telefonos', 'emails', 'direcciones'])->findOrFail($id);
+
+            // Eliminar las relaciones (telefonos, emails, direcciones)
+            $contacto->telefonos()->delete();
+            $contacto->emails()->delete();
+            $contacto->direcciones()->delete();
+
+            // Finalmente, eliminar el contacto
+            $contacto->delete();
+
+            return response()->json(['message' => 'Contacto eliminado exitosamente'], 200);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Error al eliminar el contacto', 'details' => $e->getMessage()], 500);
+        }
     }
 }

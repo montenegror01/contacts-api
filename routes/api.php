@@ -13,3 +13,4 @@ Route::apiResource('contactos', ContactoController::class);
 
 // Ruta adicional para filtrar contactos por ciudad
 Route::get('contactos/ciudad/{ciudad}', [ContactoController::class, 'contactosPorCiudad']);
+Route::delete('/contactos/{id}', [ContactoController::class, 'destroy']);
