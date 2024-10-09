@@ -12,9 +12,25 @@ class ContactoController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Contacto::with(['telefonos', 'emails', 'direcciones']);
+        $search = $request->input('search'); // Obtén el parámetro de búsqueda
+    $query = Contacto::with(['telefonos', 'emails', 'direcciones']);
 
-        return $query->paginate(10);
+    if ($search) {
+        $query->where(function($q) use ($search) {
+            $q->where('nombre', 'like', '%' . $search . '%')
+              ->orWhereHas('telefonos', function ($q) use ($search) {
+                  $q->where('numero', 'like', '%' . $search . '%');
+              })
+              ->orWhereHas('emails', function ($q) use ($search) {
+                  $q->where('email', 'like', '%' . $search . '%');
+              })
+              ->orWhereHas('direcciones', function ($q) use ($search) {
+                  $q->where('direccion', 'like', '%' . $search . '%');
+              });
+        });
+    }
+
+    return $query->paginate(10); // Mantén la paginación
     }
 
     public function contactosPorCiudad($ciudad)
